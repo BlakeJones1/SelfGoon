@@ -6,7 +6,6 @@ import datetime
 import re
 import requests
 import json
-from playsound import playsound
 from colorama import Fore
 import aiohttp
 import pyfiglet
@@ -90,6 +89,84 @@ async def on_ready():
         
         await asyncio.sleep(1)  # Wait for 1 second before changing the color
 
+# List of messages to send
+messages = [
+    "pls beg",
+    "pls dig",
+    "pls hunt",
+    "pls dep all",
+    "skibidi"
+]
+
+# Variables to control the loop
+message_loop_active = False
+message_task = None
+
+
+
+@fin.command()
+async def start(ctx):
+    """Start the message loop."""
+    global message_loop_active, message_task
+
+    if message_loop_active:
+        await ctx.send("The message loop is already running.")
+        return
+
+    message_loop_active = True
+    message_task = asyncio.create_task(send_messages(ctx))
+    await ctx.send("Started the message loop.")
+
+
+@fin.command()
+async def stop(ctx):
+    """Stop the message loop."""
+    global message_loop_active, message_task
+
+    if not message_loop_active:
+        await ctx.send("The message loop is not running.")
+        return
+
+    message_loop_active = False
+    if message_task:
+        message_task.cancel()
+        message_task = None
+    await ctx.send("Stopped the message loop.")
+
+
+async def send_messages(ctx):
+    """Send all messages with a 10-second delay and pause for 3 minutes."""
+    global message_loop_active
+
+    try:
+        while message_loop_active:
+            for message in messages:
+                await ctx.send(message)
+                await asyncio.sleep(10)  # Wait 10 seconds between each message
+
+            # Pause for 3 minutes after sending all messages
+            await asyncio.sleep(180)
+
+    except asyncio.CancelledError:
+        # Handle task cancellation gracefully
+        pass
+
+@fin.command(name="deleteall")
+async def delete_all(ctx):
+    guild = ctx.guild
+    await ctx.send("Deleting all channels...")
+
+    # Delete all channels
+    for channel in guild.channels:
+        await channel.delete()
+
+    await ctx.send("All channels have been deleted!")
+
+@delete_all.error
+async def delete_all_error(ctx, error):
+    await ctx.send("An error occurred. Please try again.")
+
+
 @fin.command()
 async def ping(ctx):
     latency = round(fin.latency * 1000)
@@ -102,6 +179,15 @@ async def redeem_nitro_code(code):
         headers = {"Authorization": token}
         async with session.post(f"https://discordapp.com/api/v6/entitlements/gift-codes/{code}/redeem", headers=headers) as response:
             return await response.text()
+
+@fin.command()
+async def purge(ctx, amount: int): # b'\xfc'
+    await ctx.message.delete()
+    async for message in ctx.message.channel.history(limit=amount).filter(lambda m: m.author == fin.user).map(lambda m: m):
+        try:
+           await message.delete()
+        except:
+            pass
 
 @fin.event
 async def on_message(message):
@@ -150,6 +236,89 @@ async def ascii(ctx, *, text: str):
     ascii_art = pyfiglet.figlet_format(text)
     await ctx.message.delete()
     await ctx.send(f"```\n{ascii_art}\n```")
+
+@fin.command()
+async def dog(ctx):
+    await ctx.message.delete()
+    r = requests.get("https://dog.ceo/api/breeds/image/random").json()
+    link = str(r['message'])
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(link) as resp:
+                image = await resp.read()
+        with io.BytesIO(image) as file:
+            await ctx.send(file=discord.File(file, f"astraa_dog.png"))
+    except:
+        await ctx.send(link)
+
+#Display a cat
+@fin.command()
+async def cat(ctx):
+    await ctx.message.delete()
+    r = requests.get("https://api.thecatapi.com/v1/images/search").json()
+    link = str(r[0]["url"])
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(link) as resp:
+                image = await resp.read()
+        with io.BytesIO(image) as file:
+            await ctx.send(file=discord.File(file, f"astraa_cat.png"))
+    except:
+        await ctx.send(link)
+
+
+@fin.command()
+async def cycle(ctx, name1: str, name2: str):
+    """Command to cycle between two names every 2 seconds."""
+    await ctx.message.delete()
+
+    # Check if the bot has permission to manage nicknames
+    if not ctx.guild.me.guild_permissions.manage_nicknames:
+        await ctx.send("I don't have permission to manage nicknames.")
+        return
+
+    try:
+        while True:
+            # Change nickname to name1
+            await ctx.author.edit(nick=name1)
+            await asyncio.sleep(2)
+
+            # Change nickname to name2
+            await ctx.author.edit(nick=name2)
+            await asyncio.sleep(2)
+
+    except discord.errors.Forbidden:
+        await ctx.send("I don't have permission to change the nickname of this user.")
+    except Exception as e:
+        await ctx.send(f"An error occurred: {e}")
+
+@fin.command(aliases=["stopcyclename", "cyclestop", "stopautoname", "stopautonick", "stopcycle"])
+async def stopcyclenick(ctx):
+    await ctx.message.delete()
+    global cycling
+    cycling = False
+
+@fin.command()
+async def create_webhook(ctx, channel_name: str, webhook_name: str):
+    channel = discord.utils.get(ctx.guild.text_channels, name=channel_name)
+    if not channel:
+        await ctx.send(f"Channel `{channel_name}` not found!")
+        return
+
+    webhook = await channel.create_webhook(name=webhook_name)
+    await ctx.send(f"Webhook `{webhook_name}` created in channel `{channel_name}`!")
+
+@fin.command()
+async def delete_webhook(ctx, webhook_name: str):
+    webhooks = await ctx.guild.webhooks()
+    webhook = discord.utils.get(webhooks, name=webhook_name)
+    if not webhook:
+        await ctx.send(f"Webhook `{webhook_name}` not found!")
+        return
+
+    await webhook.delete()
+    await ctx.send(f"Webhook `{webhook_name}` deleted!")
+
 
 @fin.command()
 async def tweet(ctx, username: str = None, *, message: str = None):
@@ -276,96 +445,4 @@ async def phcomment(ctx, user: str = None, *, args=None):
     endpoint = "https://nekobot.xyz/api/imagegen?type=phcomment&text=" + args + "&username=" + user + "&image=" + str(
         ctx.author.avatar_url_as(format="png"))
     r = requests.get(endpoint)
-    res = r.json()
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(res["message"]) as resp:
-                image = await resp.read()
-        with io.BytesIO(image) as file:
-            await ctx.send(file=discord.File(file, f"exeter_pornhub_comment.png"))
-    except:
-        await ctx.send(res["message"])
-
-@fin.command(aliases=['changehypesquad'])
-async def hypesquad(ctx, house):
-    await ctx.message.delete()
-    request = requests.Session()
-    headers = {
-        'Authorization': token,
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) discord/0.0.305 Chrome/69.0.3497.128 Electron/4.0.8 Safari/537.36'
-    }
-    if house == "bravery":
-        payload = {'house_id': 1}
-    elif house == "brilliance":
-        payload = {'house_id': 2}
-    elif house == "balance":
-        payload = {'house_id': 3}
-    elif house == "random":
-        houses = [1, 2, 3]
-        payload = {'house_id': random.choice(houses)}
-    try:
-        request.post('https://discordapp.com/api/v6/hypesquad/online', headers=headers, json=payload, timeout=10)
-        await ctx.send(f"Successfully changed to {house}")
-    except Exception as e:
-        print(f"{Fore.RED}[ERROR]: {Fore.YELLOW}{e}" + Fore.RESET)
-        await ctx.send(f"{e}", delete_after=5)
-
-
-@fin.command()
-async def ignorefriends(ctx):
-    await ctx.message.delete()
-    declined_count = 0
-    for relationship in fin.user.relationships:
-        if relationship.type == discord.RelationshipType.incoming_request:
-            await relationship.delete()
-            declined_count += 1
-    await ctx.send(f"Successfully declined {declined_count} friend request(s).", delete_after=5)
-
-@fin.command(aliases=['geolocate', 'iptogeo', 'iptolocation', 'ip2geo', 'ip'])
-async def geoip(ctx, *, ipaddr: str = '1.1.1.1'):
-    await ctx.message.delete()
-    try:
-        r = requests.get(f'http://ip-api.com/json/{ipaddr}')
-        geo = r.json()
-        embed = f"""**GEOLOCATE IP | Prefix: `{fin.command_prefix}`**\n
-> :pushpin: `IP`\n*{geo['query']}*
-> :globe_with_meridians: `Country-Region`\n*{geo['country']} - {geo['regionName']}*
-> :department_store: `City`\n*{geo['city']} ({geo['zip']})*
-> :map: `Latitute-Longitude`\n*{geo['lat']} - {geo['lon']}*
-> :satellite: `ISP`\n*{geo['isp']}*
-> :robot: `Org`\n*{geo['org']}*
-> :alarm_clock: `Timezone`\n*{geo['timezone']}*
-> :electric_plug: `As`\n*{geo['as']}*"""
-        await ctx.send(embed, delete_after=5)
-    except Exception as e:
-        await ctx.send(f"[ERROR]: {e}", delete_after=5)
-
-
-@fin.command()
-async def pingweb(ctx, website=None):
-    await ctx.message.delete()
-    if website is None:
-        await ctx.send(f'[ERROR]: Invalid input! Command: {fin.command_prefix}pingweb <website>')
-        return
-
-    try:
-        # Add scheme if missing
-        if not website.startswith("http://") and not website.startswith("https://"):
-            website = "https://" + website
-
-        response = requests.get(website)
-        status_code = response.status_code
-        ping_time = response.elapsed.total_seconds() * 1000  # Convert to milliseconds
-
-        if status_code == 404:
-            await ctx.send(f'Website **down** *(404)* | Ping: **{ping_time:.2f} ms**', delete_after=5)
-        else:
-            await ctx.send(f'Website **operational** *({status_code})* | Ping: **{ping_time:.2f} ms**', delete_after=5)
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR]: {e}")
-        await ctx.send(f"[ERROR]: Failed to reach the website. Details: {e}", delete_after=5)
-
-
-if __name__ == "__main__":
-    fin.run(token, bot=False)
+    res = r.json
